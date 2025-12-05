@@ -1,0 +1,644 @@
+{
+  "exportType": "workflows",
+  "workflows": [
+    {
+      "name": "Dispatcher_Contenuti",
+      "settings": {
+        "executionOrder": "v1",
+        "saveManualExecutions": true
+      },
+      "nodes": [
+        {
+          "id": "1",
+          "name": "Trigger Intake",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 1,
+          "position": [200, 300],
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "dispatcher/intake",
+            "responseMode": "onReceived",
+            "options": {
+              "responseData": "received",
+              "responseCode": 200
+            }
+          }
+        },
+        {
+          "id": "2",
+          "name": "IF Tipo Contenuto",
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 1,
+          "position": [400, 300],
+          "parameters": {
+            "conditions": {
+              "boolean": [],
+              "number": [],
+              "string": [
+                {
+                  "operation": "equal",
+                  "value1": "={{$json[\"tipo_contenuto\"]}}",
+                  "value2": "Pagina_Prodotto"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "3",
+          "name": "Flow Pagina Prodotto",
+          "type": "n8n-nodes-base.executeWorkflow",
+          "typeVersion": 1,
+          "position": [600, 260],
+          "parameters": {
+            "workflow": "Flow_PaginaProdotto",
+            "options": {
+              "mapInputs": [
+                {
+                  "pairedItem": "current"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "connections": {
+        "Trigger Intake": {
+          "main": [
+            [
+              {
+                "node": "IF Tipo Contenuto",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "IF Tipo Contenuto": {
+          "main": [
+            [
+              {
+                "node": "Flow Pagina Prodotto",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "Flow_PaginaProdotto",
+      "settings": {
+        "executionOrder": "v1",
+        "saveManualExecutions": true
+      },
+      "nodes": [
+        {
+          "id": "10",
+          "name": "Start",
+          "type": "n8n-nodes-base.start",
+          "typeVersion": 1,
+          "position": [200, 300],
+          "parameters": {}
+        },
+        {
+          "id": "11",
+          "name": "LLM Brief Normalizer",
+          "type": "n8n-nodes-base.openAi",
+          "typeVersion": 3,
+          "position": [440, 300],
+          "parameters": {
+            "operation": "chat",
+            "model": "gpt-4o-mini",
+            "systemMessage": "{{ $json.prompt_brief_normalizer || 'Sei un Brief Normalizer per pagine prodotto assicurative. Ricevi il brief iniziale e restituisci solo un JSON con campi normalizzati: product_summary, persona, goal, constraints, tone, risk_level, materials. Assicurati di mantenere lingua e vincoli espliciti.' }}",
+            "messages": [
+              {
+                "message": "Input brief: {{ $json }}",
+                "name": "user"
+              }
+            ],
+            "options": {
+              "responseFormat": "json"
+            },
+            "credentials": {
+              "openAiApi": "OpenAI API"
+            }
+          }
+        },
+        {
+          "id": "12",
+          "name": "LLM SEO Brief",
+          "type": "n8n-nodes-base.openAi",
+          "typeVersion": 3,
+          "position": [680, 300],
+          "parameters": {
+            "operation": "chat",
+            "model": "gpt-4o-mini",
+            "systemMessage": "{{ $json.prompt_seo_brief || 'Sei un SEO strategist. Usa il brief normalizzato per proporre keyword core, keyword long-tail, search intent, H1 suggerito, sezioni e FAQ candidate. Rispondi solo in JSON.' }}",
+            "messages": [
+              {
+                "message": "Brief normalizzato: {{$json}}",
+                "name": "user"
+              }
+            ],
+            "options": {
+              "responseFormat": "json"
+            },
+            "credentials": {
+              "openAiApi": "OpenAI API"
+            }
+          }
+        },
+        {
+          "id": "13",
+          "name": "LLM Research Agent",
+          "type": "n8n-nodes-base.openAi",
+          "typeVersion": 3,
+          "position": [920, 300],
+          "parameters": {
+            "operation": "chat",
+            "model": "gpt-4o-mini",
+            "systemMessage": "{{ $json.prompt_research || 'Sei un ricercatore assicurativo. Sintetizza coverage, exclusions, target, key_figures, compliance_notes partendo da SEO brief e materiali. Restituisci JSON Fact_Sheet.' }}",
+            "messages": [
+              {
+                "message": "SEO brief: {{$json}}\nMateriali: {{$json.materials || ''}}",
+                "name": "user"
+              }
+            ],
+            "options": {
+              "responseFormat": "json"
+            },
+            "credentials": {
+              "openAiApi": "OpenAI API"
+            }
+          }
+        },
+        {
+          "id": "14",
+          "name": "LLM Outline Agent",
+          "type": "n8n-nodes-base.openAi",
+          "typeVersion": 3,
+          "position": [1160, 300],
+          "parameters": {
+            "operation": "chat",
+            "model": "gpt-4o-mini",
+            "systemMessage": "{{ $json.prompt_outline || 'Sei un content strategist. Genera un outline JSON con sections[{id,title,purpose,bullets}] basato su SEO brief e Fact Sheet.' }}",
+            "messages": [
+              {
+                "message": "SEO brief: {{$json.seo_brief || $json}}\nFact sheet: {{$json.fact_sheet || ''}}",
+                "name": "user"
+              }
+            ],
+            "options": {
+              "responseFormat": "json"
+            },
+            "credentials": {
+              "openAiApi": "OpenAI API"
+            }
+          }
+        },
+        {
+          "id": "15",
+          "name": "LLM Writer Agent",
+          "type": "n8n-nodes-base.openAi",
+          "typeVersion": 3,
+          "position": [1400, 300],
+          "parameters": {
+            "operation": "chat",
+            "model": "gpt-4o-mini",
+            "systemMessage": "{{ $json.prompt_writer || 'Sei un copywriter assicurativo. Scrivi Draft_v1 esteso in lingua del brief, seguendo outline, tono e Fact Sheet. Rispondi con JSON {text}.' }}",
+            "messages": [
+              {
+                "message": "Outline: {{$json.outline || $json}}\nFact sheet: {{$json.fact_sheet || ''}}\nTone: {{$json.tone || ''}}",
+                "name": "user"
+              }
+            ],
+            "options": {
+              "responseFormat": "json"
+            },
+            "credentials": {
+              "openAiApi": "OpenAI API"
+            }
+          }
+        },
+        {
+          "id": "16",
+          "name": "Subflow Brand Voice",
+          "type": "n8n-nodes-base.executeWorkflow",
+          "typeVersion": 1,
+          "position": [1640, 220],
+          "parameters": {
+            "workflow": "Subflow_BrandVoice_Terminology",
+            "options": {
+              "mapInputs": [
+                {
+                  "pairedItem": "current",
+                  "assignments": {
+                    "text": "={{$json.text}}",
+                    "tone": "={{$json.tone || ''}}",
+                    "glossary": "={{$json.glossary || ''}}"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "17",
+          "name": "Subflow SEO OnPage",
+          "type": "n8n-nodes-base.executeWorkflow",
+          "typeVersion": 1,
+          "position": [1880, 220],
+          "parameters": {
+            "workflow": "Subflow_SEO_OnPage",
+            "options": {
+              "mapInputs": [
+                {
+                  "pairedItem": "current",
+                  "assignments": {
+                    "text": "={{$json.text_brand_safe}}",
+                    "seo_brief": "={{$json.seo_brief || ''}}"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "18",
+          "name": "Subflow QA Compliance",
+          "type": "n8n-nodes-base.executeWorkflow",
+          "typeVersion": 1,
+          "position": [2120, 220],
+          "parameters": {
+            "workflow": "Subflow_QA_Compliance",
+            "options": {
+              "mapInputs": [
+                {
+                  "pairedItem": "current",
+                  "assignments": {
+                    "text": "={{$json.text_seo}}",
+                    "fact_sheet": "={{$json.fact_sheet || ''}}",
+                    "risk_level": "={{$json.risk_level || 'medium'}}"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "19",
+          "name": "IF Risk",
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 1,
+          "position": [2360, 220],
+          "parameters": {
+            "conditions": {
+              "boolean": [],
+              "number": [],
+              "string": [
+                {
+                  "value1": "={{$json.risk_assessment}}",
+                  "operation": "notEqual",
+                  "value2": "low"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "20",
+          "name": "Notify Reviewer",
+          "type": "n8n-nodes-base.emailSend",
+          "typeVersion": 1,
+          "position": [2600, 120],
+          "parameters": {
+            "fromEmail": "compliance@company.com",
+            "toEmail": "reviewer@company.com",
+            "subject": "Revisione pagina prodotto",
+            "text": "{{`Bozza: ${$json.text_clean || $json.text_seo}\nReport: ${JSON.stringify($json.issues || [])}`}}"
+          }
+        },
+        {
+          "id": "21",
+          "name": "Output Finale",
+          "type": "n8n-nodes-base.set",
+          "typeVersion": 2,
+          "position": [2600, 320],
+          "parameters": {
+            "keepOnlySet": true,
+            "values": {
+              "string": [
+                {
+                  "name": "text_final",
+                  "value": "={{$json.text_clean || $json.text_seo}}"
+                },
+                {
+                  "name": "metadata",
+                  "value": "={{$json.metadata || ''}}"
+                },
+                {
+                  "name": "risk_assessment",
+                  "value": "={{$json.risk_assessment || 'low'}}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "connections": {
+        "Start": {
+          "main": [
+            [
+              {
+                "node": "LLM Brief Normalizer",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "LLM Brief Normalizer": {
+          "main": [
+            [
+              {
+                "node": "LLM SEO Brief",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "LLM SEO Brief": {
+          "main": [
+            [
+              {
+                "node": "LLM Research Agent",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "LLM Research Agent": {
+          "main": [
+            [
+              {
+                "node": "LLM Outline Agent",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "LLM Outline Agent": {
+          "main": [
+            [
+              {
+                "node": "LLM Writer Agent",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "LLM Writer Agent": {
+          "main": [
+            [
+              {
+                "node": "Subflow Brand Voice",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Subflow Brand Voice": {
+          "main": [
+            [
+              {
+                "node": "Subflow SEO OnPage",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Subflow SEO OnPage": {
+          "main": [
+            [
+              {
+                "node": "Subflow QA Compliance",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Subflow QA Compliance": {
+          "main": [
+            [
+              {
+                "node": "IF Risk",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "IF Risk": {
+          "main": [
+            [
+              {
+                "node": "Notify Reviewer",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "Output Finale",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Notify Reviewer": {
+          "main": [
+            [
+              {
+                "node": "Output Finale",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "Subflow_BrandVoice_Terminology",
+      "settings": {
+        "executionOrder": "v1",
+        "saveManualExecutions": true
+      },
+      "nodes": [
+        {
+          "id": "30",
+          "name": "Start",
+          "type": "n8n-nodes-base.start",
+          "typeVersion": 1,
+          "position": [200, 200],
+          "parameters": {}
+        },
+        {
+          "id": "31",
+          "name": "Brand Voice Chat",
+          "type": "n8n-nodes-base.openAi",
+          "typeVersion": 3,
+          "position": [440, 200],
+          "parameters": {
+            "operation": "chat",
+            "model": "gpt-4o-mini",
+            "systemMessage": "Sei un revisore di brand per contenuti assicurativi. Applica tono, lingua e glossario approvato senza cambiare il significato. Restituisci JSON {text_brand_safe}.",
+            "messages": [
+              {
+                "message": "Testo da adattare: {{$json.text}}\nTono: {{$json.tone || ''}}\nGlossario: {{$json.glossary || ''}}",
+                "name": "user"
+              }
+            ],
+            "options": {
+              "responseFormat": "json"
+            },
+            "credentials": {
+              "openAiApi": "OpenAI API"
+            }
+          }
+        }
+      ],
+      "connections": {
+        "Start": {
+          "main": [
+            [
+              {
+                "node": "Brand Voice Chat",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "Subflow_SEO_OnPage",
+      "settings": {
+        "executionOrder": "v1",
+        "saveManualExecutions": true
+      },
+      "nodes": [
+        {
+          "id": "40",
+          "name": "Start",
+          "type": "n8n-nodes-base.start",
+          "typeVersion": 1,
+          "position": [200, 200],
+          "parameters": {}
+        },
+        {
+          "id": "41",
+          "name": "SEO OnPage Chat",
+          "type": "n8n-nodes-base.openAi",
+          "typeVersion": 3,
+          "position": [440, 200],
+          "parameters": {
+            "operation": "chat",
+            "model": "gpt-4o-mini",
+            "systemMessage": "Sei un SEO specialist. Ottimizza il testo per on-page SEO mantenendo il significato. Restituisci JSON {text_seo, metadata:{title,meta_description,slug,h2,faq,schema_markup}}.",
+            "messages": [
+              {
+                "message": "Testo: {{$json.text}}\nSEO Brief: {{$json.seo_brief || ''}}",
+                "name": "user"
+              }
+            ],
+            "options": {
+              "responseFormat": "json"
+            },
+            "credentials": {
+              "openAiApi": "OpenAI API"
+            }
+          }
+        }
+      ],
+      "connections": {
+        "Start": {
+          "main": [
+            [
+              {
+                "node": "SEO OnPage Chat",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "Subflow_QA_Compliance",
+      "settings": {
+        "executionOrder": "v1",
+        "saveManualExecutions": true
+      },
+      "nodes": [
+        {
+          "id": "50",
+          "name": "Start",
+          "type": "n8n-nodes-base.start",
+          "typeVersion": 1,
+          "position": [200, 200],
+          "parameters": {}
+        },
+        {
+          "id": "51",
+          "name": "QA Compliance Chat",
+          "type": "n8n-nodes-base.openAi",
+          "typeVersion": 3,
+          "position": [440, 200],
+          "parameters": {
+            "operation": "chat",
+            "model": "gpt-4o-mini",
+            "systemMessage": "Sei un revisore QA/compliance. Correggi errori, applica disclaimer obbligatori e individua claim non supportati. Restituisci JSON {text_clean, issues:[{type,detail}], risk_assessment}.",
+            "messages": [
+              {
+                "message": "Testo da verificare: {{$json.text}}\nFact sheet: {{$json.fact_sheet || ''}}\nRisk level dichiarato: {{$json.risk_level || 'medium'}}",
+                "name": "user"
+              }
+            ],
+            "options": {
+              "responseFormat": "json"
+            },
+            "credentials": {
+              "openAiApi": "OpenAI API"
+            }
+          }
+        }
+      ],
+      "connections": {
+        "Start": {
+          "main": [
+            [
+              {
+                "node": "QA Compliance Chat",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    }
+  ]
+}
